@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  release-radar:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    # If you have a .env file with secrets, you can load it here
+    # env_file:
+    #   - .env
