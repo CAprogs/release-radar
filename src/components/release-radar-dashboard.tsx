@@ -1,14 +1,16 @@
+
 "use client";
 
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { AlertTriangle, CheckCircle, Github, GitFork, Loader2, PlusCircle, RefreshCw, Star, Triangle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Github, GitFork, Loader2, PlusCircle, RefreshCw, Star, Trash2, Triangle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import type { Repository, Release } from "@/lib/types";
+import type { Repository } from "@/lib/types";
 import { analyzeRelease } from "@/lib/actions";
+import { validateAndFetchRepository, fetchNewReleasesForRepo } from "@/lib/github";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,31 +28,6 @@ const formSchema = z.object({
   url: z.string().url({ message: "Please enter a valid GitHub repository URL." }),
   version: z.string().min(1, { message: "Please enter a starting version tag." }),
 });
-
-const initialRepositories: Repository[] = [
-  {
-    id: "1",
-    name: "shadcn/ui",
-    url: "https://github.com/shadcn/ui",
-    stars: 50000,
-    forks: 2000,
-    releases: [
-      { id: "1-1", version: "v0.8.0", rawNotes: "Added new components: Resizable, Sonner. Improved dark mode support. Fixed 50+ bugs." },
-      { id: "1-2", version: "v0.7.1", rawNotes: "Performance improvements for Chart components. Bug fixes for date picker." },
-    ],
-  },
-  {
-    id: "2",
-    name: "tailwindlabs/tailwindcss",
-    url: "https://github.com/tailwindlabs/tailwindcss",
-    stars: 80000,
-    forks: 4000,
-    releases: [
-        { id: "2-1", version: "v3.4.1", rawNotes: "Fixes an issue where `backdrop-blur` wasn't working with `border-collapse`." },
-        { id: "2-2", version: "v3.4.0", rawNotes: "Adds new `svh`, `lvh` and `dvh` variants for full-height layouts. Introduces `has-*` variants for `:has(...)` pseudo-class." },
-    ],
-  },
-];
 
 type ImpactLevel = "high" | "medium" | "low";
 
@@ -73,9 +50,11 @@ function ImpactBadge({ impact }: { impact: ImpactLevel }) {
 
 
 export default function ReleaseRadarDashboard() {
-  const [repositories, setRepositories] = React.useState<Repository[]>(initialRepositories);
+  const [repositories, setRepositories] = React.useState<Repository[]>([]);
   const [projectDescription, setProjectDescription] = React.useState<string>("");
   const [analyzing, setAnalyzing] = React.useState<string | null>(null);
+  const [isAdding, setIsAdding] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -83,22 +62,77 @@ export default function ReleaseRadarDashboard() {
     defaultValues: { url: "", version: "" },
   });
 
-  const handleAddRepository = (values: z.infer<typeof formSchema>) => {
-    const repoName = new URL(values.url).pathname.substring(1);
-    const newRepo: Repository = {
-      id: Date.now().toString(),
-      name: repoName,
-      url: values.url,
-      stars: 0,
-      forks: 0,
-      releases: [{ id: `${Date.now()}-1`, version: values.version, rawNotes: `Release notes from ${values.version} will be tracked here.` }],
-    };
-    setRepositories(prev => [newRepo, ...prev]);
-    form.reset();
+  const handleAddRepository = async (values: z.infer<typeof formSchema>) => {
+    setIsAdding(true);
+    try {
+        const newRepo = await validateAndFetchRepository(values.url, values.version);
+        setRepositories(prev => [newRepo, ...prev]);
+        form.reset();
+        toast({
+            title: "Repository Added",
+            description: `${newRepo.name} is now being tracked.`,
+        });
+    } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "Failed to Add Repository",
+            description: error instanceof Error ? error.message : "An unknown error occurred.",
+        });
+    } finally {
+        setIsAdding(false);
+    }
+  };
+
+  const handleRemoveRepository = (repoId: string) => {
+    const repo = repositories.find(r => r.id === repoId);
+    setRepositories(prev => prev.filter(r => r.id !== repoId));
     toast({
-        title: "Repository Added",
-        description: `${repoName} is now being tracked.`,
-    })
+        title: "Repository Removed",
+        description: `${repo?.name} is no longer being tracked.`,
+    });
+  };
+  
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+    let totalNewReleases = 0;
+    try {
+        const newReleasesPromises = repositories.map(repo => {
+            const latestVersion = repo.releases[0]?.version;
+            if (!latestVersion) return Promise.resolve([]);
+            return fetchNewReleasesForRepo(repo.name, latestVersion);
+        });
+
+        const results = await Promise.allSettled(newReleasesPromises);
+
+        const updatedRepositories = repositories.map((repo, index) => {
+            const result = results[index];
+            if (result.status === 'fulfilled' && result.value.length > 0) {
+                const newReleases = result.value;
+                totalNewReleases += newReleases.length;
+                return {
+                    ...repo,
+                    releases: [...newReleases, ...repo.releases],
+                };
+            }
+            return repo;
+        });
+
+        setRepositories(updatedRepositories);
+
+        toast({
+            title: "Refresh Complete",
+            description: `Found ${totalNewReleases} new release(s).`,
+        });
+
+    } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "Refresh Failed",
+            description: error instanceof Error ? error.message : "An unknown error occurred.",
+        });
+    } finally {
+        setIsRefreshing(false);
+    }
   };
 
   const handleAnalyze = async (repoId: string, releaseId: string) => {
@@ -148,10 +182,8 @@ export default function ReleaseRadarDashboard() {
             <Logo className="h-6 w-6 text-primary"/>
             <h1 className="text-xl font-bold tracking-tight text-foreground">Release Radar</h1>
           </div>
-          <Button size="sm" variant="outline" onClick={() => {
-              toast({ title: "Refreshing...", description: "Checking for new releases."})
-          }}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button size="sm" variant="outline" onClick={handleRefreshAll} disabled={isRefreshing || repositories.length === 0}>
+            {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Refresh All
           </Button>
         </div>
@@ -209,8 +241,8 @@ export default function ReleaseRadarDashboard() {
                                     </FormItem>
                                 )}
                             />
-                            <Button type="submit" className="w-full">
-                                <PlusCircle className="mr-2 h-4 w-4" />
+                            <Button type="submit" className="w-full" disabled={isAdding}>
+                                {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
                                 Add Repository
                             </Button>
                         </form>
@@ -221,22 +253,36 @@ export default function ReleaseRadarDashboard() {
           </div>
           <div className="lg:col-span-2">
             <div className="space-y-6">
+              {repositories.length === 0 && !isAdding ? (
+                 <Card className="flex items-center justify-center h-48">
+                    <CardContent className="p-6 text-center">
+                        <p className="text-lg font-medium text-muted-foreground">No repositories tracked yet.</p>
+                        <p className="text-sm text-muted-foreground">Use the form to add a repository and start tracking releases.</p>
+                    </CardContent>
+                 </Card>
+              ) : null}
               <AnimatePresence>
               {repositories.map(repo => (
-                <motion.div key={repo.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+                <motion.div key={repo.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }} layout>
                   <Card>
                     <CardHeader>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
                             <Github className="h-8 w-8 text-muted-foreground"/>
-                            <div>
-                              <CardTitle className="text-2xl font-bold">{repo.name}</CardTitle>
-                              <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary transition-colors">{repo.url}</a>
+                            <div className="min-w-0">
+                              <CardTitle className="text-2xl font-bold truncate">{repo.name}</CardTitle>
+                              <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary transition-colors truncate block">{repo.url}</a>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4 text-sm">
-                            <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
-                            <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
+                          <div className="flex items-center gap-4 flex-shrink-0">
+                            <div className="hidden sm:flex items-center gap-4 text-sm">
+                                <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
+                                <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveRepository(repo.id)}>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Remove Repository</span>
+                            </Button>
                           </div>
                       </div>
                     </CardHeader>
