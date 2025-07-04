@@ -6,6 +6,5 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-    # If you have a .env file with secrets, you can load it here
-    # env_file:
-    #   - .env
+    env_file:
+      - .env
