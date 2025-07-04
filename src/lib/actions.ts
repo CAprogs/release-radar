@@ -2,7 +2,8 @@
 
 import { summarizeReleaseNotes } from "@/ai/flows/summarize-release-notes";
 import { predictImpactLevel } from "@/ai/flows/predict-impact-level";
-import type { Release } from "./types";
+import { analyzeOverallImpact as analyzeOverallImpactFlow } from "@/ai/flows/analyze-overall-impact";
+import type { Release, Repository } from "./types";
 
 export async function analyzeRelease(
   releaseNotes: string,
@@ -43,3 +44,43 @@ export async function analyzeRelease(
     throw new Error("An unknown error occurred during release analysis.");
   }
 }
+
+
+export async function analyzeOverallImpact(
+    releases: Pick<Release, 'version' | 'rawNotes'>[],
+    projectDescription: string
+  ): Promise<NonNullable<Repository['overallImpact']>> {
+    try {
+      if (!projectDescription.trim()) {
+        throw new Error("Project description is required for impact analysis.");
+      }
+      if (releases.length === 0) {
+        throw new Error("No releases provided for overall analysis.");
+      }
+  
+      // Reverse to send oldest to newest
+      const releaseNotes = releases.map(r => `Version: ${r.version}\n\n${r.rawNotes}`).reverse();
+  
+      const result = await analyzeOverallImpactFlow({
+        releaseNotes,
+        projectDescription,
+      });
+      
+      if (!result || !result.impactLevel || !result.reason || !result.summary) {
+          throw new Error("Failed to get overall impact analysis from AI model.");
+      }
+  
+      return {
+        summary: result.summary,
+        impact: result.impactLevel,
+        reason: result.reason,
+      };
+  
+    } catch (error) {
+      console.error("Error analyzing overall impact:", error);
+      if (error instanceof Error) {
+          throw new Error(`Failed to analyze overall impact: ${error.message}`);
+      }
+      throw new Error("An unknown error occurred during overall impact analysis.");
+    }
+  }

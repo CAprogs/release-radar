@@ -10,10 +10,16 @@ export interface Release {
 }
 
 export interface Repository {
-  id: string;
+  id:string;
   name: string;
   url: string;
   stars: number;
   forks: number;
   releases: Release[];
+  projectDescription: string;
+  overallImpact?: {
+    summary: string;
+    impact: ImpactLevel;
+    reason: string;
+  }
 }

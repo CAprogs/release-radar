@@ -9,7 +9,7 @@ import { AlertTriangle, CheckCircle, Github, GitFork, Loader2, PlusCircle, Refre
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { Repository } from "@/lib/types";
-import { analyzeRelease } from "@/lib/actions";
+import { analyzeRelease, analyzeOverallImpact } from "@/lib/actions";
 import { validateAndFetchRepository, fetchNewReleasesForRepo } from "@/lib/github";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const formSchema = z.object({
   url: z.string().url({ message: "Please enter a valid GitHub repository URL." }),
@@ -53,9 +54,12 @@ export default function ReleaseRadarDashboard() {
   const [repositories, setRepositories] = React.useState<Repository[]>([]);
   const [projectDescription, setProjectDescription] = React.useState<string>("");
   const [analyzing, setAnalyzing] = React.useState<string | null>(null);
+  const [analyzingOverall, setAnalyzingOverall] = React.useState<string | null>(null);
   const [isAdding, setIsAdding] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const { toast } = useToast();
+  const [overallAnalysisResult, setOverallAnalysisResult] = React.useState<({ repoName: string } & NonNullable<Repository['overallImpact']>) | null>(null);
+
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -64,8 +68,18 @@ export default function ReleaseRadarDashboard() {
 
   const handleAddRepository = async (values: z.infer<typeof formSchema>) => {
     setIsAdding(true);
+    if (!projectDescription.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Project Description Required",
+        description: "Please provide a global project description before adding a repository.",
+      });
+      setIsAdding(false);
+      return;
+    }
+
     try {
-        const newRepo = await validateAndFetchRepository(values.url, values.version);
+        const newRepo = await validateAndFetchRepository(values.url, values.version, projectDescription);
         setRepositories(prev => [newRepo, ...prev]);
         form.reset();
         toast({
@@ -139,18 +153,18 @@ export default function ReleaseRadarDashboard() {
     const repo = repositories.find(r => r.id === repoId);
     const release = repo?.releases.find(rel => rel.id === releaseId);
 
-    if (!release || !projectDescription.trim()) {
+    if (!release || !repo?.projectDescription.trim()) {
         toast({
             variant: "destructive",
             title: "Analysis Failed",
-            description: "Please provide a project description before analyzing a release.",
+            description: "Please provide a project description for this repository before analyzing.",
         });
         return;
     }
 
     setAnalyzing(releaseId);
     try {
-        const result = await analyzeRelease(release.rawNotes, projectDescription);
+        const result = await analyzeRelease(release.rawNotes, repo.projectDescription);
         setRepositories(prevRepos =>
             prevRepos.map(r =>
                 r.id === repoId
@@ -174,177 +188,257 @@ export default function ReleaseRadarDashboard() {
     }
   };
 
-  return (
-    <div className="flex flex-col min-h-svh bg-background font-body">
-      <header className="sticky top-0 z-10 w-full border-b bg-background/80 backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-2">
-            <Logo className="h-6 w-6 text-primary"/>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Release Radar</h1>
-          </div>
-          <Button size="sm" variant="outline" onClick={handleRefreshAll} disabled={isRefreshing || repositories.length === 0}>
-            {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Refresh All
-          </Button>
-        </div>
-      </header>
+  const handleUpdateRepoDescription = (repoId: string, newDescription: string) => {
+    setRepositories(prev => prev.map(repo => repo.id === repoId ? { ...repo, projectDescription: newDescription } : repo));
+  };
+
+  const handleAnalyzeOverall = async (repoId: string) => {
+    const repo = repositories.find(r => r.id === repoId);
+    if (!repo || !repo.projectDescription.trim() || repo.releases.length <= 1) {
+      toast({
+          variant: "destructive",
+          title: "Analysis Failed",
+          description: "A project description and at least two releases are required for an overall analysis.",
+      });
+      return;
+    }
+
+    setAnalyzingOverall(repoId);
+    try {
+      const result = await analyzeOverallImpact(repo.releases, repo.projectDescription);
       
-      <main className="container mx-auto flex-1 p-4 md:p-6">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <Card className="sticky top-24">
-              <CardHeader>
-                <CardTitle>Configuration</CardTitle>
-                <CardDescription>Setup your project and repositories to track.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                    <Label htmlFor="project-description">Your Project Description</Label>
-                    <Textarea
-                        id="project-description"
-                        placeholder="e.g., I'm building a data visualization dashboard with React and TypeScript..."
-                        value={projectDescription}
-                        onChange={(e) => setProjectDescription(e.target.value)}
-                        rows={5}
-                        className="text-base"
-                    />
-                    <p className="text-xs text-muted-foreground">Describe your project for more accurate impact analysis.</p>
-                </div>
-                <Separator />
-                <div>
-                    <h3 className="font-semibold mb-4">Track New Repository</h3>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(handleAddRepository)} className="space-y-4">
-                            <FormField
-                                control={form.control}
-                                name="url"
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Repository URL</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="https://github.com/user/repo" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="version"
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Initial Version Tag</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="v1.0.0" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <Button type="submit" className="w-full" disabled={isAdding}>
-                                {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                                Add Repository
-                            </Button>
-                        </form>
-                    </Form>
-                </div>
-              </CardContent>
-            </Card>
+      const updatedRepo = { ...repo, overallImpact: result };
+      setRepositories(prev => prev.map(r => r.id === repoId ? updatedRepo : r));
+      setOverallAnalysisResult({ ...result, repoName: repo.name });
+
+    } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "AI Error",
+            description: error instanceof Error ? error.message : "Failed to get overall analysis from the AI model.",
+        });
+    } finally {
+        setAnalyzingOverall(null);
+    }
+  };
+
+  return (
+    <>
+      <Dialog open={!!overallAnalysisResult} onOpenChange={(open) => !open && setOverallAnalysisResult(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Overall Impact Analysis for {overallAnalysisResult?.repoName}</DialogTitle>
+            <DialogDescription>
+              This is a consolidated analysis of all new releases from the initial tracked version to the latest.
+            </DialogDescription>
+          </DialogHeader>
+          {overallAnalysisResult && (
+            <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold">Overall Impact:</h3>
+                <ImpactBadge impact={overallAnalysisResult.impact} />
+              </div>
+              <div className="p-4 bg-accent/20 rounded-md border border-accent/30">
+                <h4 className="font-semibold mb-2 text-accent">AI Impact Reasoning</h4>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{overallAnalysisResult.reason}</p>
+              </div>
+              <div className="p-4 bg-primary/20 rounded-md border border-primary/30">
+                <h4 className="font-semibold mb-2 text-primary">AI Consolidated Summary</h4>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{overallAnalysisResult.summary}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <div className="flex flex-col min-h-svh bg-background font-body">
+        <header className="sticky top-0 z-10 w-full border-b bg-background/80 backdrop-blur-sm">
+          <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+            <div className="flex items-center gap-2">
+              <Logo className="h-6 w-6 text-primary"/>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Release Radar</h1>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleRefreshAll} disabled={isRefreshing || repositories.length === 0}>
+              {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Refresh All
+            </Button>
           </div>
-          <div className="lg:col-span-2">
-            <div className="space-y-6">
-              {repositories.length === 0 && !isAdding ? (
-                 <Card className="flex items-center justify-center h-48">
-                    <CardContent className="p-6 text-center">
-                        <p className="text-lg font-medium text-muted-foreground">No repositories tracked yet.</p>
-                        <p className="text-sm text-muted-foreground">Use the form to add a repository and start tracking releases.</p>
-                    </CardContent>
-                 </Card>
-              ) : null}
-              <AnimatePresence>
-              {repositories.map(repo => (
-                <motion.div key={repo.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }} layout>
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <Github className="h-8 w-8 text-muted-foreground"/>
-                            <div className="min-w-0">
-                              <CardTitle className="text-2xl font-bold truncate">{repo.name}</CardTitle>
-                              <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary transition-colors truncate block">{repo.url}</a>
+        </header>
+        
+        <main className="container mx-auto flex-1 p-4 md:p-6">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle>Configuration</CardTitle>
+                  <CardDescription>Setup your project and repositories to track.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                      <Label htmlFor="project-description">Global Project Description</Label>
+                      <Textarea
+                          id="project-description"
+                          placeholder="e.g., I'm building a data visualization dashboard with React and TypeScript..."
+                          value={projectDescription}
+                          onChange={(e) => setProjectDescription(e.target.value)}
+                          rows={5}
+                          className="text-base"
+                      />
+                      <p className="text-xs text-muted-foreground">This is used as the default context for new repositories.</p>
+                  </div>
+                  <Separator />
+                  <div>
+                      <h3 className="font-semibold mb-4">Track New Repository</h3>
+                      <Form {...form}>
+                          <form onSubmit={form.handleSubmit(handleAddRepository)} className="space-y-4">
+                              <FormField
+                                  control={form.control}
+                                  name="url"
+                                  render={({ field }) => (
+                                      <FormItem>
+                                      <FormLabel>Repository URL</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="https://github.com/user/repo" {...field} />
+                                      </FormControl>
+                                      <FormMessage />
+                                      </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="version"
+                                  render={({ field }) => (
+                                      <FormItem>
+                                      <FormLabel>Initial Version Tag</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="v1.0.0" {...field} />
+                                      </FormControl>
+                                      <FormMessage />
+                                      </FormItem>
+                                  )}
+                              />
+                              <Button type="submit" className="w-full" disabled={isAdding}>
+                                  {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                                  Add Repository
+                              </Button>
+                          </form>
+                      </Form>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="lg:col-span-2">
+              <div className="space-y-6">
+                {repositories.length === 0 && !isAdding ? (
+                   <Card className="flex items-center justify-center h-48">
+                      <CardContent className="p-6 text-center">
+                          <p className="text-lg font-medium text-muted-foreground">No repositories tracked yet.</p>
+                          <p className="text-sm text-muted-foreground">Use the form to add a repository and start tracking releases.</p>
+                      </CardContent>
+                   </Card>
+                ) : null}
+                <AnimatePresence>
+                {repositories.map(repo => (
+                  <motion.div key={repo.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }} layout>
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Github className="h-8 w-8 text-muted-foreground"/>
+                              <div className="min-w-0">
+                                <CardTitle className="text-2xl font-bold truncate">{repo.name}</CardTitle>
+                                <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary transition-colors truncate block">{repo.url}</a>
+                                <div className="hidden sm:flex items-center gap-4 text-sm mt-1">
+                                    <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
+                                    <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-4 flex-shrink-0">
-                            <div className="hidden sm:flex items-center gap-4 text-sm">
-                                <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
-                                <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Button 
+                                  size="sm"
+                                  onClick={() => handleAnalyzeOverall(repo.id)}
+                                  disabled={analyzingOverall === repo.id || repo.releases.length <=1}>
+                                  {analyzingOverall === repo.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                  Analyze Upgrade
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveRepository(repo.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Remove Repository</span>
+                              </Button>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveRepository(repo.id)}>
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Remove Repository</span>
-                            </Button>
-                          </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Accordion type="single" collapsible className="w-full">
-                        {repo.releases.map(release => (
-                            <AccordionItem value={release.id} key={release.id}>
-                                <AccordionTrigger className="text-lg font-medium hover:no-underline">
-                                    <div className="flex items-center justify-between w-full pr-4">
-                                        <span>Version: {release.version}</span>
-                                        {release.impact && <ImpactBadge impact={release.impact} />}
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="pt-2 pb-4 space-y-4">
-                                    <div className="p-4 bg-secondary/50 rounded-md border">
-                                      <h4 className="font-semibold mb-2 text-foreground">Original Release Notes</h4>
-                                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{release.rawNotes}</p>
-                                    </div>
-                                    <div className="flex items-center justify-end">
-                                        <Button 
-                                            onClick={() => handleAnalyze(repo.id, release.id)} 
-                                            disabled={!projectDescription.trim() || analyzing === release.id}
-                                        >
-                                            {analyzing === release.id ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : null}
-                                            Analyze Impact
-                                        </Button>
-                                    </div>
-                                    <AnimatePresence>
-                                    {release.summary && (
-                                        <motion.div 
-                                          initial={{ opacity: 0, height: 0 }} 
-                                          animate={{ opacity: 1, height: 'auto' }}
-                                          transition={{ duration: 0.5, ease: "easeInOut" }}
-                                          className="space-y-4 overflow-hidden"
-                                        >
-                                            <Separator />
-                                            <div className="p-4 bg-card rounded-md border border-primary/20 shadow-sm">
-                                              <h4 className="font-semibold mb-2 text-primary">AI Summary</h4>
-                                              <p className="text-sm text-foreground whitespace-pre-wrap">{release.summary}</p>
-                                            </div>
-                                             <div className="p-4 bg-card rounded-md border border-accent/20 shadow-sm">
-                                              <h4 className="font-semibold mb-2 text-accent">AI Impact Analysis</h4>
-                                              <p className="text-sm text-foreground whitespace-pre-wrap">{release.reason}</p>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                    </AnimatePresence>
-                                </AccordionContent>
-                            </AccordionItem>
-                        ))}
-                      </Accordion>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-              </AnimatePresence>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 mb-6">
+                            <Label htmlFor={`project-description-${repo.id}`}>Project Context for <span className="font-semibold">{repo.name}</span></Label>
+                            <Textarea
+                                id={`project-description-${repo.id}`}
+                                placeholder="e.g., I'm using this library for my e-commerce checkout page..."
+                                value={repo.projectDescription}
+                                onChange={(e) => handleUpdateRepoDescription(repo.id, e.target.value)}
+                                rows={3}
+                                className="text-base"
+                            />
+                        </div>
+                        <Accordion type="single" collapsible className="w-full">
+                          {repo.releases.map(release => (
+                              <AccordionItem value={release.id} key={release.id}>
+                                  <AccordionTrigger className="text-lg font-medium hover:no-underline">
+                                      <div className="flex items-center justify-between w-full pr-4">
+                                          <span>Version: {release.version}</span>
+                                          {release.impact && <ImpactBadge impact={release.impact} />}
+                                      </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="pt-2 pb-4 space-y-4">
+                                      <div className="p-4 bg-secondary/50 rounded-md border">
+                                        <h4 className="font-semibold mb-2 text-foreground">Original Release Notes</h4>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{release.rawNotes}</p>
+                                      </div>
+                                      <div className="flex items-center justify-end">
+                                          <Button 
+                                              onClick={() => handleAnalyze(repo.id, release.id)} 
+                                              disabled={!repo.projectDescription.trim() || analyzing === release.id}
+                                          >
+                                              {analyzing === release.id ? (
+                                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                              ) : null}
+                                              Analyze Impact
+                                          </Button>
+                                      </div>
+                                      <AnimatePresence>
+                                      {release.summary && (
+                                          <motion.div 
+                                            initial={{ opacity: 0, height: 0 }} 
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            transition={{ duration: 0.5, ease: "easeInOut" }}
+                                            className="space-y-4 overflow-hidden"
+                                          >
+                                              <Separator />
+                                              <div className="p-4 bg-card rounded-md border border-primary/20 shadow-sm">
+                                                <h4 className="font-semibold mb-2 text-primary">AI Summary</h4>
+                                                <p className="text-sm text-foreground whitespace-pre-wrap">{release.summary}</p>
+                                              </div>
+                                               <div className="p-4 bg-card rounded-md border border-accent/20 shadow-sm">
+                                                <h4 className="font-semibold mb-2 text-accent">AI Impact Analysis</h4>
+                                                <p className="text-sm text-foreground whitespace-pre-wrap">{release.reason}</p>
+                                              </div>
+                                          </motion.div>
+                                      )}
+                                      </AnimatePresence>
+                                  </AccordionContent>
+                              </AccordionItem>
+                          ))}
+                        </Accordion>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   );
 }

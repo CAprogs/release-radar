@@ -18,7 +18,8 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 
 export async function validateAndFetchRepository(
   url: string,
-  startVersion: string
+  startVersion: string,
+  projectDescription: string
 ): Promise<Repository> {
   const parsed = parseGitHubUrl(url);
   if (!parsed) {
@@ -74,6 +75,7 @@ export async function validateAndFetchRepository(
       version: rel.tag_name,
       rawNotes: rel.body || 'No release notes provided.',
     })),
+    projectDescription,
   };
 }
 
