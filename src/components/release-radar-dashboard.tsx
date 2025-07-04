@@ -235,8 +235,8 @@ export default function ReleaseRadarDashboard() {
                             </div>
                           </div>
                           <div className="flex items-center gap-4 text-sm">
-                            <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString()}</span>
-                            <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString()}</span>
+                            <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
+                            <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
                           </div>
                       </div>
                     </CardHeader>
