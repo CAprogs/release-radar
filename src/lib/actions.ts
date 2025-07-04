@@ -7,7 +7,8 @@ import type { Release, Repository } from "./types";
 
 export async function analyzeRelease(
   releaseNotes: string,
-  projectDescription: string
+  projectDescription: string,
+  language: string,
 ): Promise<Pick<Release, "summary" | "impact" | "reason">> {
   try {
     if (!projectDescription.trim()) {
@@ -15,7 +16,7 @@ export async function analyzeRelease(
     }
     
     // Step 1: Get a summary of the release notes. This also gives a preliminary impact prediction.
-    const summaryResult = await summarizeReleaseNotes({ releaseNotes });
+    const summaryResult = await summarizeReleaseNotes({ releaseNotes, language });
 
     if (!summaryResult || !summaryResult.summary) {
         throw new Error("Failed to generate release notes summary.");
@@ -25,6 +26,7 @@ export async function analyzeRelease(
     const impactResult = await predictImpactLevel({
       releaseNotesSummary: summaryResult.summary,
       projectDescription: projectDescription,
+      language: language,
     });
 
     if (!impactResult || !impactResult.impactLevel || !impactResult.reason) {
@@ -48,7 +50,8 @@ export async function analyzeRelease(
 
 export async function analyzeOverallImpact(
     releases: Pick<Release, 'version' | 'rawNotes'>[],
-    projectDescription: string
+    projectDescription: string,
+    language: string,
   ): Promise<NonNullable<Repository['overallImpact']>> {
     try {
       if (!projectDescription.trim()) {
@@ -64,6 +67,7 @@ export async function analyzeOverallImpact(
       const result = await analyzeOverallImpactFlow({
         releaseNotes,
         projectDescription,
+        language
       });
       
       if (!result || !result.impactLevel || !result.reason || !result.summary) {

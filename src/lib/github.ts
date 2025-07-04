@@ -73,6 +73,7 @@ export async function validateAndFetchRepository(
     releases: releasesSinceStart.map((rel: any) => ({
       id: rel.id.toString(),
       version: rel.tag_name,
+      publishedAt: rel.published_at,
       rawNotes: rel.body || 'No release notes provided.',
     })),
     projectDescription,
@@ -107,6 +108,7 @@ export async function fetchNewReleasesForRepo(
   return newReleasesData.map((rel: any) => ({
     id: rel.id.toString(),
     version: rel.tag_name,
+    publishedAt: rel.published_at,
     rawNotes: rel.body || 'No release notes provided.',
   }));
 }

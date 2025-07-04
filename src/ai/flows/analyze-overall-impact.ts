@@ -14,6 +14,7 @@ import {z} from 'genkit';
 const AnalyzeOverallImpactInputSchema = z.object({
   releaseNotes: z.array(z.string()).describe('An array of release notes from oldest to newest.'),
   projectDescription: z.string().describe('Description of the user project to assess impact.'),
+  language: z.string().optional().describe('The desired output language for the analysis (e.g., "French", "Spanish").'),
 });
 export type AnalyzeOverallImpactInput = z.infer<typeof AnalyzeOverallImpactInputSchema>;
 
@@ -34,6 +35,7 @@ const prompt = ai.definePrompt({
   output: {schema: AnalyzeOverallImpactOutputSchema},
   prompt: `You are an AI assistant specialized in analyzing software release impact. The user is considering upgrading a dependency across multiple versions.
   Your task is to analyze the following series of release notes and provide an overall impact assessment for their project.
+  {{#if language}}Your summary and reasoning should be in {{language}}.{{/if}}
 
   The user's project is described as: "{{{projectDescription}}}"
 

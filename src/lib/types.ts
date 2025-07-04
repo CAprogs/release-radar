@@ -3,6 +3,7 @@ export type ImpactLevel = "high" | "medium" | "low";
 export interface Release {
   id: string;
   version: string;
+  publishedAt: string;
   rawNotes: string;
   summary?: string;
   impact?: ImpactLevel;

@@ -5,7 +5,10 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { AlertTriangle, CheckCircle, Github, GitFork, Loader2, PlusCircle, RefreshCw, Star, Trash2, Triangle } from "lucide-react";
+import { format } from "date-fns";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { AlertTriangle, CheckCircle, Github, GitFork, Info, Languages, Loader2, PlusCircle, RefreshCw, Star, Trash2, Triangle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { Repository } from "@/lib/types";
@@ -24,6 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 const formSchema = z.object({
   url: z.string().url({ message: "Please enter a valid GitHub repository URL." }),
@@ -49,10 +54,19 @@ function ImpactBadge({ impact }: { impact: ImpactLevel }) {
     );
 }
 
+const MarkdownDisplay = ({ content }: { content: string }) => (
+    <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {content}
+        </ReactMarkdown>
+    </div>
+);
+
 
 export default function ReleaseRadarDashboard() {
   const [repositories, setRepositories] = React.useState<Repository[]>([]);
   const [projectDescription, setProjectDescription] = React.useState<string>("");
+  const [language, setLanguage] = React.useState("English");
   const [analyzing, setAnalyzing] = React.useState<string | null>(null);
   const [analyzingOverall, setAnalyzingOverall] = React.useState<string | null>(null);
   const [isAdding, setIsAdding] = React.useState(false);
@@ -164,7 +178,7 @@ export default function ReleaseRadarDashboard() {
 
     setAnalyzing(releaseId);
     try {
-        const result = await analyzeRelease(release.rawNotes, repo.projectDescription);
+        const result = await analyzeRelease(release.rawNotes, repo.projectDescription, language);
         setRepositories(prevRepos =>
             prevRepos.map(r =>
                 r.id === repoId
@@ -205,7 +219,7 @@ export default function ReleaseRadarDashboard() {
 
     setAnalyzingOverall(repoId);
     try {
-      const result = await analyzeOverallImpact(repo.releases, repo.projectDescription);
+      const result = await analyzeOverallImpact(repo.releases, repo.projectDescription, language);
       
       const updatedRepo = { ...repo, overallImpact: result };
       setRepositories(prev => prev.map(r => r.id === repoId ? updatedRepo : r));
@@ -240,11 +254,11 @@ export default function ReleaseRadarDashboard() {
               </div>
               <div className="p-4 bg-accent/20 rounded-md border border-accent/30">
                 <h4 className="font-semibold mb-2 text-accent">AI Impact Reasoning</h4>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{overallAnalysisResult.reason}</p>
+                <MarkdownDisplay content={overallAnalysisResult.reason} />
               </div>
               <div className="p-4 bg-primary/20 rounded-md border border-primary/30">
                 <h4 className="font-semibold mb-2 text-primary">AI Consolidated Summary</h4>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{overallAnalysisResult.summary}</p>
+                <MarkdownDisplay content={overallAnalysisResult.summary} />
               </div>
             </div>
           )}
@@ -280,10 +294,27 @@ export default function ReleaseRadarDashboard() {
                           placeholder="e.g., I'm building a data visualization dashboard with React and TypeScript..."
                           value={projectDescription}
                           onChange={(e) => setProjectDescription(e.target.value)}
-                          rows={5}
+                          rows={4}
                           className="text-base"
                       />
                       <p className="text-xs text-muted-foreground">This is used as the default context for new repositories.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="language-select">AI Summary Language</Label>
+                     <Select value={language} onValueChange={setLanguage}>
+                        <SelectTrigger id="language-select" className="w-full">
+                            <Languages className="mr-2 h-4 w-4" />
+                            <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="English">English</SelectItem>
+                            <SelectItem value="Spanish">Spanish</SelectItem>
+                            <SelectItem value="French">French</SelectItem>
+                            <SelectItem value="German">German</SelectItem>
+                            <SelectItem value="Japanese">Japanese</SelectItem>
+                            <SelectItem value="Chinese">Chinese</SelectItem>
+                        </SelectContent>
+                    </Select>
                   </div>
                   <Separator />
                   <div>
@@ -343,13 +374,16 @@ export default function ReleaseRadarDashboard() {
                       <CardHeader>
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex items-center gap-3 min-w-0">
-                              <Github className="h-8 w-8 text-muted-foreground"/>
+                              <Github className="h-8 w-8 text-muted-foreground flex-shrink-0"/>
                               <div className="min-w-0">
                                 <CardTitle className="text-2xl font-bold truncate">{repo.name}</CardTitle>
                                 <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary transition-colors truncate block">{repo.url}</a>
-                                <div className="hidden sm:flex items-center gap-4 text-sm mt-1">
-                                    <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
-                                    <span className="flex items-center gap-1"><GitFork className="h-4 w-4 text-muted-foreground"/> {repo.forks.toLocaleString('en-US')}</span>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mt-2 text-muted-foreground">
+                                    <span className="flex items-center gap-1.5"><Star className="h-4 w-4 text-amber-500"/> {repo.stars.toLocaleString('en-US')}</span>
+                                    <span className="flex items-center gap-1.5"><GitFork className="h-4 w-4 "/> {repo.forks.toLocaleString('en-US')}</span>
+                                    <span className="flex items-center gap-1.5"><Info className="h-4 w-4"/> 
+                                        {repo.releases.length} new releases since {repo.releases[repo.releases.length - 1]?.version}
+                                    </span>
                                 </div>
                               </div>
                             </div>
@@ -385,14 +419,19 @@ export default function ReleaseRadarDashboard() {
                               <AccordionItem value={release.id} key={release.id}>
                                   <AccordionTrigger className="text-lg font-medium hover:no-underline">
                                       <div className="flex items-center justify-between w-full pr-4">
-                                          <span>Version: {release.version}</span>
+                                          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                                            <span>Version: {release.version}</span>
+                                            <span className="text-xs text-muted-foreground">{format(new Date(release.publishedAt), 'PPP')}</span>
+                                          </div>
                                           {release.impact && <ImpactBadge impact={release.impact} />}
                                       </div>
                                   </AccordionTrigger>
                                   <AccordionContent className="pt-2 pb-4 space-y-4">
                                       <div className="p-4 bg-secondary/50 rounded-md border">
                                         <h4 className="font-semibold mb-2 text-foreground">Original Release Notes</h4>
-                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{release.rawNotes}</p>
+                                        <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{release.rawNotes}</ReactMarkdown>
+                                        </div>
                                       </div>
                                       <div className="flex items-center justify-end">
                                           <Button 
@@ -416,11 +455,11 @@ export default function ReleaseRadarDashboard() {
                                               <Separator />
                                               <div className="p-4 bg-card rounded-md border border-primary/20 shadow-sm">
                                                 <h4 className="font-semibold mb-2 text-primary">AI Summary</h4>
-                                                <p className="text-sm text-foreground whitespace-pre-wrap">{release.summary}</p>
+                                                <MarkdownDisplay content={release.summary} />
                                               </div>
                                                <div className="p-4 bg-card rounded-md border border-accent/20 shadow-sm">
                                                 <h4 className="font-semibold mb-2 text-accent">AI Impact Analysis</h4>
-                                                <p className="text-sm text-foreground whitespace-pre-wrap">{release.reason}</p>
+                                                <MarkdownDisplay content={release.reason || ""} />
                                               </div>
                                           </motion.div>
                                       )}

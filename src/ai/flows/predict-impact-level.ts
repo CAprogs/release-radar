@@ -19,6 +19,7 @@ const PredictImpactLevelInputSchema = z.object({
   projectDescription: z
     .string()
     .describe('Description of the user project to assess impact.'),
+  language: z.string().optional().describe('The desired output language for the analysis (e.g., "French", "Spanish").'),
 });
 export type PredictImpactLevelInput = z.infer<typeof PredictImpactLevelInputSchema>;
 
@@ -42,6 +43,7 @@ const prompt = ai.definePrompt({
   output: {schema: PredictImpactLevelOutputSchema},
   prompt: `You are an AI assistant specialized in predicting the impact level of software releases on user projects.
   Based on the release notes summary and the project description, determine the impact level (high, medium, or low) and provide a brief explanation.
+  {{#if language}}Your explanation should be in {{language}}.{{/if}}
 
   Release Notes Summary: {{{releaseNotesSummary}}}
   Project Description: {{{projectDescription}}}

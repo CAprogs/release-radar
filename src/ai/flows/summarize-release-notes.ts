@@ -16,6 +16,7 @@ const SummarizeReleaseNotesInputSchema = z.object({
   releaseNotes: z
     .string()
     .describe('The release notes to summarize.'),
+  language: z.string().optional().describe('The desired output language for the summary (e.g., "French", "Spanish").'),
 });
 export type SummarizeReleaseNotesInput = z.infer<typeof SummarizeReleaseNotesInputSchema>;
 
@@ -23,7 +24,7 @@ const SummarizeReleaseNotesOutputSchema = z.object({
   summary: z.string().describe('The summarized release notes.'),
   impactPrediction: z
     .enum(['high', 'medium', 'low'])
-    .describe('The predicted impact level (high, medium, low) on the user\'s project.'),
+    .describe('The predicted impact level (high, medium, or low) on the user\'s project.'),
 });
 export type SummarizeReleaseNotesOutput = z.infer<typeof SummarizeReleaseNotesOutputSchema>;
 
@@ -41,9 +42,10 @@ const summarizeReleaseNotesPrompt = ai.definePrompt({
 
   Summarize the following release notes, highlighting major features, performance improvements, and bug fixes.
   Also, predict the potential impact (high, medium, low) on the user's project based on the changes described.
+  {{#if language}}Your summary should be in {{language}}.{{/if}}
 
   Release Notes:
-  {{releaseNotes}}
+  {{{releaseNotes}}}
 
   Respond with a summary of the release notes and a single word indicating the predicted impact level (high, medium, or low).`,
 });
