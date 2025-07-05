@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # Database Migration (nouveau)
+  db-migrate:
+    build: .
+    environment:
+      - DATABASE_URL=postgresql://releaseradar:releaseradar@db:5432/releaseradar
+      - NODE_ENV=production
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npx", "prisma", "db", "push"]
+    restart: "no"  # Ne redémarre pas après succès
+
   # Release Radar Application
   release-radar:
     build: .
@@ -29,8 +43,8 @@ services:
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully  # Attend que la migration soit terminée
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9002/api/health"]

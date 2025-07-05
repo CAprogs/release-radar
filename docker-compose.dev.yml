@@ -17,6 +17,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Database Migration
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      - DATABASE_URL=postgresql://releaseradar:releaseradar@db:5432/releaseradar
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npx", "prisma", "db", "push"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+
   # Release Radar Development
   release-radar-dev:
     build:
@@ -34,11 +49,12 @@ services:
       - .:/app
       - /app/node_modules
     depends_on:
-      db:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     stdin_open: true
     tty: true
+
 
 volumes:
   postgres_data_dev:
