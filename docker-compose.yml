@@ -21,9 +21,9 @@ services:
   release-radar:
     build: .
     ports:
-      - "3000:3000"
+      - "9002:9002"
     environment:
-      - PORT=3000
+      - PORT=9002
       - NODE_ENV=production
       - DATABASE_URL=postgresql://releaseradar:releaseradar@db:5432/releaseradar
     env_file:
@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

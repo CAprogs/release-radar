@@ -1,175 +1,80 @@
 # Release Radar
 
-## Purpose
+An AI-powered assistant to analyze and understand the impact of software releases.
 
-Release Radar is an open-source project designed to help developers and project managers quickly understand the potential impact of new software releases by leveraging AI to analyze release notes and predict their overall impact.
+## ✨ Features
 
-## Features
+- **AI-Powered Analysis:** Uses Google's Gemini model to summarize release notes, predict impact levels (High, Medium, Low), and provide detailed reasoning.
+- **Persistent Storage:** Uses a PostgreSQL database to store repositories, releases, and analysis results.
+- **Modern UI:** A clean, responsive interface built with Next.js, Tailwind CSS, and shadcn/ui.
+- **Dockerized:** Fully containerized for easy setup, development, and deployment.
+- **Simplified Workflow:** Manage the entire application lifecycle with a single `justfile`.
 
-- **Release Note Summarization:** Automatically generates concise summaries of release notes.
-- **Impact Prediction:** Predicts the potential impact level (e.g., Low, Medium, High) of a release based on its content.
-- **Overall Impact Analysis:** Provides a comprehensive analysis of the potential impact of a release across various aspects.
-- **User Interface:** A web-based interface for interacting with the analysis tools and viewing results.
+## 🚀 Quick Start
 
-## Quick Start
+Getting started with Release Radar is now easier than ever.
 
-For the fastest way to get started, use the included start script:
+**Prerequisites:**
+- [Docker](https://www.docker.com/get-started) and Docker Compose
+- `uvx` and `just` (Install with `pipx install uvx && uvx --from=rust-just just --version`)
+- A [Google AI API Key](https://ai.google.dev/)
 
+**1. Clone the Repository**
 ```bash
-./start.sh
-```
-
-This script will:
-- Check if your environment is properly configured
-- Create a `.env` file from the example if needed
-- Give you options to run the application locally or with Docker
-
-## Manual Installation
-
-To set up Release Radar locally, follow these steps:
-
-1. **Clone the repository:**
-
-```bash
-git clone <repository_url>
+git clone <your-repo-url>
 cd release-radar
 ```
 
-2. **Install dependencies:**
-
+**2. Configure Your Environment**
 ```bash
-npm install
-```
-
-3. **Configure environment variables:**
-
-Copy the example environment file and configure your API key:
-
-```bash
+# This copies the example .env file
 cp .env.example .env
 ```
+Now, open the `.env` file and add your `GOOGLE_API_KEY`.
 
-Then edit the `.env` file and add your Google AI API key:
-
+**3. Start the Application**
 ```bash
-GOOGLE_API_KEY=your_google_api_key_here
+# This will build the containers, start the services, and set up the database
+uvx --from=rust-just just dev
 ```
 
-**Get your Google AI API key:**
-1. Go to [Google AI Studio](https://ai.google.dev/)
-2. Click "Get API Key"
-3. Create a new API key or use an existing one
-4. Copy the API key and paste it in your `.env` file
+That's it! The application is now running and available at [http://localhost:3000](http://localhost:3000).
 
-4. **Run the development server:**
+## ✅ Available Commands (`justfile`)
 
-```bash
-npm run dev
-```
+Use `uvx --from=rust-just just <command>` to run any of the following tasks:
 
-The application will be available at `http://localhost:9002`
+| Command      | Description                                                                |
+|--------------|----------------------------------------------------------------------------|
+| `dev`        | **(Default)** Starts the development environment with hot-reloading.         |
+| `prod`       | Starts the production environment.                                         |
+| `stop`       | Stops all running Docker containers.                                       |
+| `logs`       | Tails the logs from the running services.                                  |
+| `clean`      | Stops and removes all containers, volumes, and networks.                   |
+| `db-setup`   | Pushes the Prisma schema and seeds the database. (Runs automatically).     |
+| `test`       | Starts the production services, runs validation checks, and stops services. |
 
-## Running with Docker
+## 🔧 Development
 
-You can also run Release Radar using Docker. Ensure you have Docker and Docker Compose installed.
+### Database Management
+Prisma is used for database management. Here are some useful commands:
 
-1. **Create your environment file:**
+- **Push Schema Changes:** `npx prisma db push`
+- **Seed the Database:** `npm run db:seed`
+- **Open Prisma Studio:** `npx prisma studio` (A GUI for your database)
 
-```bash
-cp .env.example .env
-```
-
-2. **Add your Google AI API key to the `.env` file:**
-
-```bash
-GOOGLE_API_KEY=your_google_api_key_here
-```
-
-3. **Build and run with Docker Compose:**
-
-```bash
-docker-compose up --build
-```
-
-The application will be available at `http://localhost:3000`
-
-## Development
-
-### Local Development
-For local development without Docker:
-
-```bash
-npm run dev
-```
-
-The application will be available at `http://localhost:9002`
-
-### Development with Docker
-For development with Docker (hot reload enabled):
-
-```bash
-docker-compose -f docker-compose.dev.yml up --build
-```
-
-The application will be available at `http://localhost:9002`
-
-## Features
-
-- **Release Note Summarization:** Automatically generates concise summaries of release notes using Google AI
-- **Impact Prediction:** Predicts the potential impact level (e.g., Low, Medium, High) of a release based on its content
-- **Overall Impact Analysis:** Provides a comprehensive analysis of the potential impact of a release across various aspects
-- **User Interface:** A modern, responsive web interface built with Next.js and Tailwind CSS
-- **Repository Tracking:** Track multiple GitHub repositories and their releases
-- **AI-Powered Analysis:** Uses Google's Gemini AI model for intelligent analysis
-
-## Environment Variables
-
-The application requires the following environment variables:
-
-- `GOOGLE_API_KEY` - **Required**: Your Google AI API key for accessing Gemini AI
-- `NODE_ENV` - Environment mode (development/production)
-- `PORT` - Port number for the application (default: 3000 for production, 9002 for development)
-
-Optional environment variables:
-- `GOOGLE_GENAI_USE_VERTEXAI` - Set to `true` to use Vertex AI instead of Gemini API
-- `GOOGLE_CLOUD_PROJECT` - Required if using Vertex AI
-- `GOOGLE_CLOUD_LOCATION` - Required if using Vertex AI
-- `NEXT_TELEMETRY_DISABLED` - Set to `1` to disable Next.js telemetry
-
-## API Endpoints
-
-- `GET /api/health` - Health check endpoint for monitoring
-- Application uses server actions for GitHub repository analysis and AI processing
+### Tech Stack
+- **Frontend:** Next.js 15, React, TypeScript
+- **UI:** Tailwind CSS, shadcn/ui
+- **Backend:** Next.js Server Actions
+- **AI:** Google AI (Gemini) via Genkit
+- **Database:** PostgreSQL with Prisma ORM
+- **Containerization:** Docker & Docker Compose
+- **Task Runner:** Just
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Missing API Key Error**: Make sure your `.env` file contains a valid `GOOGLE_API_KEY`
-2. **Docker Build Fails**: Ensure Docker and Docker Compose are installed and running
-3. **Port Already in Use**: Change the port in `docker-compose.yml` or stop the conflicting service
-4. **AI Analysis Fails**: Check that your Google AI API key is valid and has sufficient quota
-
-### Getting Help
-
-- Check the browser console for client-side errors
-- Check Docker logs: `docker-compose logs -f release-radar`
-- Verify API key at [Google AI Studio](https://ai.google.dev/)
-
-## Architecture
-
-This application is built with:
-- **Frontend**: Next.js 15 with App Router, React 18, Tailwind CSS
-- **Backend**: Next.js API routes and server actions
-- **AI Integration**: Google Genkit with Gemini AI
-- **Deployment**: Docker containerization with multi-stage builds
-- **GitHub Integration**: REST API for repository and release data
-
-## Contribution
-
-We welcome contributions to Release Radar! Please see the `CONTRIBUTING.md` file for details on how to contribute.
-
-## Author
-
-This project was initiated and developed by [CAprogs](https://github.com/CAprogs) ( with the amazing help of [Gemini](https://gemini.google.com/?hl=fr) on [Firebase Studio](https://firebase.studio/) ).
+- **Port Conflicts:** Ensure ports `3000` (app) and `5432` (db) are free.
+- **AI Analysis Fails:** Double-check that your `GOOGLE_API_KEY` is correct in the `.env` file.
+- **Database Issues:** Run `uvx --from=rust-just just db-setup` to manually reset the database. If problems persist, run `uvx --from=rust-just just clean` and then `uvx --from=rust-just just dev`.
 
