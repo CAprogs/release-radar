@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ImpactLevel {
+  high
+  medium
+  low
+}
+
+model Repository {
+  id                String    @id @default(cuid())
+  name              String
+  url               String
+  stars             Int       @default(0)
+  forks             Int       @default(0)
+  projectDescription String
+  overallSummary    String?
+  overallImpact     ImpactLevel?
+  overallReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  releases          Release[]
+
+  @@map("repositories")
+}
+
+model Release {
+  id          String      @id @default(cuid())
+  version     String
+  publishedAt DateTime
+  rawNotes    String      @db.Text
+  summary     String?     @db.Text
+  impact      ImpactLevel?
+  reason      String?     @db.Text
+  repositoryId String
+  repository  Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("releases")
+}
+
+model ProjectSettings {
+  id                 String   @id @default(cuid())
+  projectDescription String   @db.Text
+  language           String   @default("English")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("project_settings")
+}

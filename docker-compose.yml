@@ -1,4 +1,23 @@
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: releaseradar
+      POSTGRES_USER: releaseradar
+      POSTGRES_PASSWORD: releaseradar
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U releaseradar -d releaseradar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Release Radar Application
   release-radar:
     build: .
     ports:
@@ -6,8 +25,12 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - DATABASE_URL=postgresql://releaseradar:releaseradar@db:5432/releaseradar
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
@@ -15,3 +38,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  postgres_data:

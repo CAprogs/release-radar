@@ -1,7 +1,7 @@
-import ReleaseRadarDashboard from '@/components/release-radar-dashboard';
+import ImprovedDashboard from '@/components/improved-dashboard';
 
 export default function Home() {
   return (
-    <ReleaseRadarDashboard />
+    <ImprovedDashboard />
   );
 }
