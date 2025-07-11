@@ -45,6 +45,9 @@ RUN adduser --system --uid 1001 nextjs
 # Copy public folder (now guaranteed to exist)
 COPY --from=builder /app/public ./public
 
+# Copy prisma schema
+COPY --from=builder /app/prisma ./prisma
+
 # Set the correct permission for prerender cache
 # This is backwards compatible with older versions of Next.js
 RUN mkdir .next

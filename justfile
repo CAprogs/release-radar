@@ -48,5 +48,4 @@ test:
     @curl --fail http://localhost:{{port}}/api/health
     @echo "--- Validating Frontend ---"
     @curl --fail http://localhost:{{port}}
-    @echo "--- All tests passed! Cleaning up... ---"
-    @just stop
+    @echo "--- All tests passed! ---""
